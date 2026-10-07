@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>LabLock</title>
+<style>
+:root{--bg:#0e1116;--card:#171c24;--line:#2a3240;--text:#e8edf4;--muted:#93a0b4;--ok:#3ecf8e;--warn:#f5a524;--accent:#5b8cff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+h1{margin:0;font-size:28px}
+.sub{color:var(--muted);margin:4px 0 20px}
+.banner{border:1px dashed var(--warn);color:var(--warn);border-radius:10px;padding:8px 12px;font-size:14px;margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.name{font-size:18px;font-weight:600}
+.badge{font-size:13px;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid}
+.badge.available{color:var(--ok);border-color:var(--ok)}
+.badge.borrowed{color:var(--warn);border-color:var(--warn)}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 16px;min-height:48px;cursor:pointer;width:100%;margin-top:12px;color:#fff;background:var(--accent)}
+button.return{background:#2a3240}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--text);margin-top:0}
+.receipt{margin-top:12px;background:#0e1116;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:14px}
+.receipt dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
+.receipt dt{color:var(--muted)}
+.receipt dd{margin:0;word-break:break-word}
+dialog{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:18px;width:min(92vw,400px)}
+dialog::backdrop{background:rgba(0,0,0,.65)}
+input{width:100%;font:inherit;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0e1116;color:var(--text);margin:8px 0 4px}
+label{color:var(--muted);font-size:14px}
+.btns{display:flex;gap:10px;margin-top:12px}
+.btns button{margin-top:0}
+</style>
+</head>
+<body>
+<main>
+  <h1>LabLock</h1>
+  <p class='sub'>University lab equipment checkout</p>
+  <div class='banner'>Demo only. The 5 USDC deposit on Base Sepolia is simulated. No wallet, no real transaction.</div>
+  <div id='list'></div>
+</main>
+
+<dialog id='dlg'>
+  <form method='dialog' id='form'>
+    <div class='name' id='dlgItem'></div>
+    <label for='student'>Student name</label>
+    <input id='student' autocomplete='name' required maxlength='60' placeholder='e.g. Ada Lovelace'>
+    <div class='btns'>
+      <button type='button' class='ghost' id='cancel'>Cancel</button>
+      <button type='submit'>Confirm borrow</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const ITEMS=[
+  {id:'fluke',name:'Fluke multimeter'},
+  {id:'rigol',name:'Rigol oscilloscope'},
+  {id:'psu',name:'Bench power supply'}
+];
+const KEY='lablock.state.v1';
+const DEPOSIT='5 USDC on Base Sepolia (simulated)';
+
+function load(){
+  try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&typeof s==='object')return s}catch(e){}
+  return {};
+}
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}
+}
+let state=load();
+let pending=null;
+
+function el(tag,cls,text){
+  const e=document.createElement(tag);
+  if(cls)e.className=cls;
+  if(text!==undefined)e.textContent=text;
+  return e;
+}
+
+function render(){
+  const list=document.getElementById('list');
+  list.textContent='';
+  ITEMS.forEach(item=>{
+    const rec=state[item.id];
+    const card=el('div','card');
+    const row=el('div','row');
+    row.append(el('div','name',item.name));
+    row.append(el('span','badge '+(rec?'borrowed':'available'),rec?'Borrowed':'Available'));
+    card.append(row);
+
+    if(rec){
+      const r=el('div','receipt');
+      const dl=el('dl');
+      [['Item',item.name],['Name',rec.name],['Time',new Date(rec.time).toLocaleString()],['Deposit',DEPOSIT],['Receipt',rec.id]]
+        .forEach(([k,v])=>{dl.append(el('dt',null,k));dl.append(el('dd',null,v))});
+      r.append(dl);
+      card.append(r);
+    }
+
+    const b=el('button',rec?'return':'',rec?'Return':'Borrow');
+    b.addEventListener('click',()=>rec?giveBack(item.id):openBorrow(item));
+    card.append(b);
+    list.append(card);
+  });
+}
+
+const dlg=document.getElementById('dlg');
+const input=document.getElementById('student');
+
+function openBorrow(item){
+  pending=item;
+  document.getElementById('dlgItem').textContent='Borrow: '+item.name;
+  input.value='';
+  dlg.showModal();
+  input.focus();
+}
+
+document.getElementById('cancel').addEventListener('click',()=>{pending=null;dlg.close()});
+
+document.getElementById('form').addEventListener('submit',e=>{
+  const name=input.value.trim();
+  if(!name||!pending){e.preventDefault();return}
+  state[pending.id]={
+    name:name,
+    time:new Date().toISOString(),
+    id:'LL-'+Math.random().toString(36).slice(2,8).toUpperCase()
+  };
+  save();
+  pending=null;
+  render();
+});
+
+function giveBack(id){
+  delete state[id];
+  save();
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
